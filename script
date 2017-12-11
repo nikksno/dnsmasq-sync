@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# v0.4 | 20171017 | 20171211 | nk
+
+set -e
+set -u
+
+sshkey=/root/.ssh/ssh-private-key-for-$dnsmasqserver
+dnsmasqserver=192.168.1.112
+thisserversip=192.168.1.102
+
+# All in One Bash Logger | v0.50 | 20171018 | 20171211 | Nk
+
+scriptname=`basename "$0"`                                            # The name of this script
+now="$(date +"%Y-%m-%d_%H-%M-%S")"                                    # The current timestamp
+logdir="$HOME/logs/$scriptname"                                       # Don't store anything else than logs in here!
+logfile="$logdir/$now"                                                # The new logfile
+if [[ -t 1 ]]; then interactive=y; else interactive=n; fi             # Determine if this is an interactive shell
+mkdir -p $logdir                                                      # Touch the dir
+touch $logfile                                                        # Touch the file
+if [ -f $logdir/latest-log ]; then rm $logdir/latest-log; fi          # Remove the old latest-log symlink
+ln -s $logfile $logdir/latest-log                                     # Recreate the symlink
+( cd $logdir && rm `ls -t | awk 'NR>43'` ) 2> /dev/null || true       # Delete all logs older than the newest 42
+exec >  >(tee -ia $logfile)                                           # Log stdout to logfile
+if [ $interactive = "n" ]; then exec 2> >(tee -ia $logfile >&2); fi   # Log stderr to logfile if non-interactive
+echo && echo "Starting $scriptname script on $now..." && echo         # Write heading to logfile
+chmod -R 700 $logdir                                                  # Secure logs directory
+
+# sync from dnsmasq server
+
+scp -vri $sshkey root@$dnsmasqserver:/etc/dnsmasq.d/* /etc/dnsmasq.d/
+scp -vri $sshkey root@$dnsmasqserver:/etc/dnsmasq.conf /etc/dnsmasq.conf
+
+# change listening ipv4
+
+sed -i "s/${dnsmasqserver}/${thisserversip}/g" /etc/dnsmasq.conf
+
+# restart dnsmasq locally
+
+echo
+echo "dnsmasq restarted on $now"
+echo
+
+/usr/sbin/service dnsmasq restart
+
+echo "all done!"
+echo
